@@ -1,26 +1,314 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Dark mode is opt-in via a `.dark` class on <html>, and also honours the OS
+   preference. It is a *selected* theme, not an automatic inversion — the dark
+   chart palette below was validated separately against the dark surface. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ========================================================================== */
+/*  INK & MARIGOLD                                                            */
+/*                                                                            */
+/*  Indian print energy with financial-terminal discipline.                   */
+/*  Loud where it should be loud, precise where it counts.                    */
+/*                                                                            */
+/*  House rules — these are constraints, not suggestions:                     */
+/*    - No gradients. No glow. No blur. No glassmorphism.                     */
+/*    - Border radius never exceeds 4px. No pill cards.                       */
+/*    - Elevation comes from hard offset blocks (4px 4px 0), never soft       */
+/*      shadows.                                                              */
+/*    - Every numeral is mono + tabular-nums, always.                         */
+/*    - Structure comes from rules and flat colour blocks.                    */
+/* ========================================================================== */
+
+@theme {
+  /* ---- Brand ------------------------------------------------------------ */
+  --color-ink: #14110f;
+  --color-paper: #faf7f0;
+  --color-marigold: #f2a20c; /* UI ONLY — fails the chart contrast floor */
+  --color-vermillion: #d93a1e;
+  --color-indigo: #1b3a6b;
+
+  /* Ink tints, for rules and secondary text */
+  --color-ink-80: #423f3c;
+  --color-ink-60: #706d6a;
+  --color-ink-40: #9e9c99;
+  --color-ink-20: #cccbc9;
+  --color-ink-10: #e6e5e3;
+
+  /* Dark-mode surfaces */
+  --color-ink-surface: #1c1917;
+  --color-ink-raised: #262220;
+
+  /* ---- Chart palette (categorical) -------------------------------------- */
+  /* Validated with dataviz/scripts/validate_palette.js — all five checks
+     PASS in both modes. ORDER IS LOAD-BEARING: an earlier ordering put
+     marigold adjacent to emerald and dropped colourblind separation into
+     the warning band. Assign in this fixed order and never cycle.
+     A 9th series folds into "Other" — it never invents a hue.            */
+  --color-cat-1: #3d5ae0; /* indigo-blue */
+  --color-cat-2: #d93a1e; /* vermillion  */
+  --color-cat-3: #0f9268; /* emerald     */
+  --color-cat-4: #a8309b; /* plum        */
+  --color-cat-5: #c57f00; /* marigold    */
+  --color-cat-6: #1580ae; /* sky         */
+  --color-cat-7: #6f8f14; /* moss        */
+  --color-cat-8: #c9186b; /* pink        */
+
+  /* ---- Status (reserved — never reused as "series 9") -------------------- */
+  --color-good: #0f6e4c;
+  --color-warning: #b8860b;
+  --color-serious: #c2410c;
+  --color-critical: #a8321c;
+
+  /* ---- Type ------------------------------------------------------------- */
+  --font-display: var(--font-familjen), "Arial Black", sans-serif;
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* ---- Constraints ------------------------------------------------------ */
+  --radius-none: 0px;
+  --radius-xs: 2px;
+  --radius-sm: 4px; /* the ceiling. nothing rounder than this. */
+
+  --shadow-block: 4px 4px 0 var(--color-ink);
+  --shadow-block-sm: 2px 2px 0 var(--color-ink);
+  --shadow-block-lg: 6px 6px 0 var(--color-ink);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ========================================================================== */
+/*  Semantic tokens                                                           */
+/* ========================================================================== */
+
+:root {
+  --surface: var(--color-paper);
+  --surface-raised: #ffffff;
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-ink-60);
+  --text-muted: var(--color-ink-40);
+  --rule: var(--color-ink);
+  --rule-hairline: var(--color-ink-20);
+
+  --chart-1: var(--color-cat-1);
+  --chart-2: var(--color-cat-2);
+  --chart-3: var(--color-cat-3);
+  --chart-4: var(--color-cat-4);
+  --chart-5: var(--color-cat-5);
+  --chart-6: var(--color-cat-6);
+  --chart-7: var(--color-cat-7);
+  --chart-8: var(--color-cat-8);
+}
+
+.dark {
+  --surface: var(--color-ink);
+  --surface-raised: var(--color-ink-surface);
+  --text-primary: #f5f2ec;
+  --text-secondary: #b3aea6;
+  --text-muted: #837e76;
+  --rule: #f5f2ec;
+  --rule-hairline: #3a3532;
+
+  /* Separately chosen dark steps — NOT a flip of the light values. */
+  --chart-1: #6c86f5;
+  --chart-2: #e8563c;
+  --chart-3: #21a87a;
+  --chart-4: #ce5cbc;
+  --chart-5: #bd870a;
+  --chart-6: #3195c6;
+  --chart-7: #7b992a;
+  --chart-8: #ee5390;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not(.light) {
+    --surface: var(--color-ink);
+    --surface-raised: var(--color-ink-surface);
+    --text-primary: #f5f2ec;
+    --text-secondary: #b3aea6;
+    --text-muted: #837e76;
+    --rule: #f5f2ec;
+    --rule-hairline: #3a3532;
+
+    --chart-1: #6c86f5;
+    --chart-2: #e8563c;
+    --chart-3: #21a87a;
+    --chart-4: #ce5cbc;
+    --chart-5: #bd870a;
+    --chart-6: #3195c6;
+    --chart-7: #7b992a;
+    --chart-8: #ee5390;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ========================================================================== */
+/*  Base                                                                      */
+/* ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--rule);
+  }
+
+  body {
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Display type: huge, tight, cropped. This is the loud half of the system. */
+  h1,
+  h2,
+  h3,
+  .display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    /* 0.95, not 0.9: below ~0.95 the line box is shorter than the glyphs, so
+       descenders and any highlighted line collide with the line above. */
+    line-height: 0.95;
+    text-transform: uppercase;
+    text-wrap: balance;
+  }
+
+  /* Every numeral, everywhere, in mono with fixed-width digits so columns
+     of funding figures line up and never jitter on hover or re-render. */
+  .num,
+  td.num,
+  th.num,
+  time,
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--color-marigold);
+    color: var(--color-ink);
+  }
+
+  /* Focus is a hard block, consistent with the rest of the system. */
+  :focus-visible {
+    outline: 3px solid var(--color-marigold);
+    outline-offset: 2px;
+  }
+}
+
+/* ========================================================================== */
+/*  Components                                                                */
+/* ========================================================================== */
+
+@layer components {
+  /* THE gutter. Every section uses this and only this, so the masthead, the
+     hero, the stat strip, every card edge and the footer all share one left
+     edge. Mixing `px-5` on a section with `mx-auto max-w-6xl` inside it (or
+     vice versa) is what produced five different edges before. */
+  .shell {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 72rem;
+    padding-inline: 1.25rem;
+  }
+
+  /* The signature surface: hard border + offset block, never a soft shadow. */
+  .block-card {
+    background: var(--surface-raised);
+    border: 3px solid var(--rule);
+    border-radius: var(--radius-sm);
+    box-shadow: 4px 4px 0 var(--rule);
+  }
+
+  .block-card-sm {
+    background: var(--surface-raised);
+    border: 2px solid var(--rule);
+    border-radius: var(--radius-xs);
+    box-shadow: 2px 2px 0 var(--rule);
+  }
+
+  /* Marigold highlight on a display line.
+     The padding is em-based so it scales with the clamped type, and
+     box-decoration-clone keeps the block intact across wrapped lines.
+     Any line using this needs leading >= 1.1 or it will clip the line above. */
+  .mark-block {
+    /* inline-block, NOT a plain inline: an inline background paints the font's
+       content area (~1.24em here), which is taller than a sub-1.2 line box and
+       therefore covers the descenders of the line above. As an inline-block it
+       owns a real box that the line box has to make room for. */
+    display: inline-block;
+    background: var(--color-marigold);
+    color: var(--color-ink);
+    padding: 0.06em 0.14em;
+    line-height: 1;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* Section label: small, caps, mono, tracked out — the terminal half. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /* Dense data table. Hairline rules; the loud typography stays outside. */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .data-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  .data-table td {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--rule-hairline);
+  }
+
+  .data-table tbody tr:hover {
+    background: color-mix(in oklab, var(--color-marigold) 12%, transparent);
+  }
+
+  /* Cause tags in the Graveyard. Flat block, no pill. */
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.125rem 0.375rem;
+    border: 1.5px solid currentColor;
+    border-radius: var(--radius-xs);
+  }
+}
+
+/* Respect reduced-motion: this design has no essential animation anyway. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

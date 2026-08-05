@@ -1,65 +1,293 @@
-import Image from "next/image";
+import { SITE } from "@/lib/site";
+import { CHART_PALETTE_LIGHT, chartVar } from "@/lib/chart-palette";
+
+/**
+ * DESIGN PROOF PAGE.
+ *
+ * Exercises the Ink & Marigold system end to end: display type, the stat
+ * strip, a dense mono funding table, cause tags, and all 8 validated chart
+ * slots. The content below is illustrative sample data for design review —
+ * it does not come from the database and is not a factual record.
+ */
+
+const SECTORS = [
+  "GenAI",
+  "Vision",
+  "Speech",
+  "Agents",
+  "Infra",
+  "Health AI",
+  "Fintech AI",
+  "Other",
+] as const;
+
+const SAMPLE_ROUNDS = [
+  { co: "Sarvam AI", round: "Series B", amt: 41_000_000, date: "2026-07-22", lead: "Lightspeed", slot: 0 },
+  { co: "Krutrim", round: "Series A", amt: 50_000_000, date: "2026-07-18", lead: "Matrix", slot: 0 },
+  { co: "Observe.AI", round: "Series D", amt: 125_000_000, date: "2026-07-11", lead: "SoftBank", slot: 2 },
+  { co: "Pixis", round: "Series C", amt: 85_000_000, date: "2026-07-04", lead: "Touring Capital", slot: 3 },
+  { co: "Neysa Networks", round: "Series A", amt: 30_000_000, date: "2026-06-27", lead: "NTTVC", slot: 4 },
+  { co: "CoRover", round: "Seed", amt: 4_500_000, date: "2026-06-19", lead: "Undisclosed", slot: 1 },
+];
+
+const SAMPLE_GRAVEYARD = [
+  { co: "BluSmart", raised: 180_000_000, when: "Apr 2025", causes: ["Governance"] },
+  { co: "Hike Rush", raised: 261_000_000, when: "Sep 2025", causes: ["Regulatory"] },
+  { co: "Otipy", raised: 42_000_000, when: "May 2025", causes: ["Capital crunch"] },
+  { co: "subtl.ai", raised: 1_200_000, when: "Nov 2025", causes: ["No PMF", "Capital crunch"] },
+];
+
+function usd(n: number): string {
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  return `$${(n / 1_000).toFixed(0)}K`;
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="flex-1">
+      {/* ---- Proof banner (not part of the design) ------------------------ */}
+      <div className="border-b-2 border-dashed py-1.5 text-center">
+        <span className="eyebrow">
+          Design proof · illustrative sample data · not live records
+        </span>
+      </div>
+
+      {/* ---- Masthead ----------------------------------------------------- */}
+      <header className="border-b-[3px]">
+        <div className="shell flex flex-wrap items-center justify-between gap-4 py-4">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="inline-block h-5 w-5 rounded-xs"
+              style={{ background: "var(--color-marigold)" }}
+            />
+            <span className="display text-2xl leading-none">{SITE.name}</span>
+          </div>
+          <nav className="eyebrow flex flex-wrap gap-5">
+            <span>Startups</span>
+            <span>Funding</span>
+            <span style={{ color: "var(--color-vermillion)" }}>Graveyard</span>
+            <span>Innovations</span>
+            <span>Podcast</span>
+          </nav>
+        </div>
+      </header>
+
+      {/* ---- Hero --------------------------------------------------------- */}
+      <section className="border-b-[3px] py-14">
+        <div className="shell">
+          <p className="eyebrow mb-5">Est. 2026 · Updated daily</p>
+          <h1 className="display max-w-4xl text-[clamp(2.25rem,6.5vw,5rem)] leading-[1.18]">
+            India&apos;s AI startups.
+            <br />
+            <span className="mark-block">Funded, shipped,</span>
+            <br />
+            and buried.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p
+            className="mt-7 max-w-xl text-base leading-relaxed"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            {SITE.description}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      {/* ---- Stat strip --------------------------------------------------- */}
+      <section className="border-b-[3px]">
+        <dl className="shell grid grid-cols-2 md:grid-cols-4">
+          {[
+            { k: "Companies tracked", v: "174", note: "AI-first, India HQ" },
+            { k: "Capital raised", v: "$2.61B", note: "since 2020" },
+            { k: "Rounds this month", v: "12", note: "+3 vs last" },
+            { k: "In the graveyard", v: "29", note: "with post-mortems" },
+          ].map((s, i) => (
+            <div
+              key={s.k}
+              className={[
+                "py-7",
+                // Cells in the left column hug the gutter, so their labels line
+                // up with the hero headline. Others sit inset past their rule.
+                i % 2 === 0 ? "pr-5" : "border-l-[3px] pl-5 pr-5",
+                // At 4-up, everything except the first cell gains a rule.
+                i > 0 ? "md:border-l-[3px] md:pl-5" : "",
+                i < 2 ? "border-b-[3px] md:border-b-0" : "",
+              ].join(" ")}
+            >
+              <dt className="eyebrow mb-2.5">{s.k}</dt>
+              <dd className="num text-4xl font-bold leading-none tracking-tight">
+                {s.v}
+              </dd>
+              <dd
+                className="num mt-2 text-[0.6875rem]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {s.note}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* ---- Funding + Graveyard ------------------------------------------ */}
+      <section className="shell grid gap-10 py-14 lg:grid-cols-[1.6fr_1fr]">
+        {/* Funding table */}
+        {/* min-w-0: grid children default to min-width:auto, which makes them
+            refuse to shrink below the table's intrinsic width — the card's
+            overflow-x-auto then never engages and the page scrolls sideways. */}
+        <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="display text-3xl">Latest rounds</h2>
+            <span className="eyebrow">Week of 20 Jul 2026</span>
+          </div>
+
+          <div className="block-card overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Round</th>
+                  <th className="text-right">Amount</th>
+                  <th>Lead</th>
+                  <th className="text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SAMPLE_ROUNDS.map((r) => (
+                  <tr key={r.co}>
+                    <td className="whitespace-nowrap font-semibold">
+                      <span
+                        aria-hidden
+                        className="mr-2 inline-block h-2 w-2 align-middle"
+                        style={{ background: chartVar(r.slot) }}
+                      />
+                      {r.co}
+                    </td>
+                    <td style={{ color: "var(--text-secondary)" }}>{r.round}</td>
+                    <td className="num text-right font-semibold">{usd(r.amt)}</td>
+                    <td style={{ color: "var(--text-secondary)" }}>{r.lead}</td>
+                    <td
+                      className="num text-right"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      {r.date}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </main>
-    </div>
+
+        {/* Graveyard */}
+        <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2
+              className="display text-3xl"
+              style={{ color: "var(--color-vermillion)" }}
+            >
+              Graveyard
+            </h2>
+            <span className="eyebrow">2025—26</span>
+          </div>
+
+          <ul className="flex flex-col gap-3">
+            {SAMPLE_GRAVEYARD.map((g) => (
+              <li key={g.co} className="block-card-sm p-3.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="display text-xl">{g.co}</span>
+                  <span
+                    className="num text-xs"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {g.when}
+                  </span>
+                </div>
+                <div
+                  className="num mt-1 text-xs"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  {usd(g.raised)} raised
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {g.causes.map((c) => (
+                    <span
+                      key={c}
+                      className="tag"
+                      style={{ color: "var(--color-vermillion)" }}
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ---- Sector palette proof ------------------------------------------ */}
+      <section className="border-t-[3px] py-14">
+        <div className="shell">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <h2 className="display text-3xl">By sector</h2>
+            <span className="eyebrow">8 slots · validated</span>
+          </div>
+          <p className="mb-6 text-sm" style={{ color: "var(--text-secondary)" }}>
+            Colour follows the company, never its rank — filtering never
+            repaints the survivors. A 9th sector folds into &ldquo;Other&rdquo;.
+          </p>
+
+          {/* Stacked bar. The 2px surface gap between fills is mandatory
+              secondary encoding, not decoration. */}
+          <div className="mb-5 flex h-11 w-full">
+            {SECTORS.map((s, i) => (
+              <div
+                key={s}
+                className="h-full"
+                style={{
+                  background: chartVar(i),
+                  flex: [28, 18, 12, 14, 10, 8, 6, 4][i],
+                  marginRight: i < SECTORS.length - 1 ? 2 : 0,
+                }}
+                title={s}
+              />
+            ))}
+          </div>
+
+          {/* Legend — identity is never colour-alone. */}
+          <ul className="flex flex-wrap gap-x-6 gap-y-2.5">
+            {SECTORS.map((s, i) => (
+              <li key={s} className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-xs"
+                  style={{ background: chartVar(i) }}
+                />
+                <span className="num text-xs">{s}</span>
+                <span
+                  className="num text-[0.625rem]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {CHART_PALETTE_LIGHT[i]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <footer className="border-t-[3px] py-7">
+        <div className="shell flex flex-wrap items-center justify-between gap-3">
+          <span className="eyebrow">
+            {SITE.name} · {SITE.tagline}
+          </span>
+          <span className="eyebrow" style={{ color: "var(--text-muted)" }}>
+            Facts + attribution, never republished prose
+          </span>
+        </div>
+      </footer>
+    </main>
   );
 }
