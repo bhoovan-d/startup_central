@@ -301,6 +301,51 @@
     border: 1.5px solid currentColor;
     border-radius: var(--radius-xs);
   }
+
+  /* The only interactive block in the system: platform links, "all episodes",
+     anything that behaves like a button. Same offset-block elevation as the
+     cards, so pressing it is the card metaphor made physical rather than a
+     new visual language. */
+  .link-block {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.5rem 0.875rem;
+    border: 2px solid var(--rule);
+    border-radius: var(--radius-xs);
+    box-shadow: 2px 2px 0 var(--rule);
+    /* Only `transform` is transitioned, deliberately. Putting `box-shadow` in
+       here makes Chrome pin the shadow's colour to whatever var(--rule)
+       resolved to on first computed style, so the block kept a light shadow on
+       the paper surface and never picked the theme back up. The shadow should
+       snap anyway — a fading shadow reads as a soft UI, which this isn't. */
+    transition: transform 90ms;
+  }
+
+  /* Travels exactly the shadow offset, so the block lands flush on the page. */
+  .link-block:hover {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  .link-block:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  /* One per view, never two — this is the lead action, not a colour option. */
+  .link-block--primary {
+    background: var(--color-marigold);
+    /* Marigold is a light fill in both modes, so the label is always ink. */
+    color: var(--color-ink);
+  }
 }
 
 /* Respect reduced-motion: this design has no essential animation anyway. */

@@ -61,7 +61,19 @@ export default function RootLayout({
       lang="en"
       className={`${display.variable} ${body.variable} ${mono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Applies to every route: nothing on this site reads from the
+            database yet. Global, so it lives here rather than in a page. */}
+        <div className="border-b-2 border-dashed py-1.5 text-center">
+          <span className="eyebrow">
+            Design proof · illustrative sample data · not live records
+          </span>
+        </div>
+        {/* The masthead and footer are rendered by each page rather than here,
+            so a page can mark its own nav item active without turning the
+            whole masthead into a Client Component for one border. */}
+        {children}
+      </body>
     </html>
   );
 }
