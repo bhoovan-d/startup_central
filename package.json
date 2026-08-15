@@ -7,18 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typegen": "next typegen",
+    "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
-    "palette:validate": "tsx scripts/validate-palette.ts"
+    "ingest": "tsx scripts/ingest.ts",
+    "ingest:review": "tsx scripts/review.ts",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
+    "@anthropic-ai/sdk": "^0.117.1",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.12",
+    "pg": "^8.23.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
@@ -26,6 +30,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
