@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Familjen_Grotesk, JetBrains_Mono, Manrope } from "next/font/google";
 
 import "./globals.css";
+import { SiteFooter } from "@/components/site-footer";
 import { SITE } from "@/lib/site";
 
 /**
@@ -62,17 +63,24 @@ export default function RootLayout({
       className={`${display.variable} ${body.variable} ${mono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
-        {/* Applies to every route: nothing on this site reads from the
-            database yet. Global, so it lives here rather than in a page. */}
-        <div className="border-b-2 border-dashed py-1.5 text-center">
-          <span className="eyebrow">
-            Design proof · illustrative sample data · not live records
-          </span>
-        </div>
-        {/* The masthead and footer are rendered by each page rather than here,
-            so a page can mark its own nav item active without turning the
-            whole masthead into a Client Component for one border. */}
+        {/*
+          There is no global disclaimer banner here any more. It said
+          "illustrative sample data · not live records", which was true while
+          every page rendered hardcoded arrays — and became a lie the moment
+          they started reading Postgres.
+
+          What replaced it is finer-grained and more useful: per-row provenance
+          (source link, `Unverified`, `Auto-extracted` — see
+          src/components/provenance.tsx) and a single "Updated {date}" line in
+          the footer. A claim about one row now travels with that row.
+
+          The masthead is rendered by each section's layout.tsx rather than
+          here, so a section can mark its own nav item active without turning
+          the whole header into a Client Component for one border. The footer
+          carries no active state, so it does live here.
+        */}
         {children}
+        <SiteFooter />
       </body>
     </html>
   );
