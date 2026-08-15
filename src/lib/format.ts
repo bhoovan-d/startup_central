@@ -80,13 +80,34 @@ export function formatDbDate(iso: string | null | undefined): string | null {
 }
 
 /**
+ * A timestamp as it can actually arrive: a `Date`, or the ISO string it turns
+ * into after a round trip through a cache.
+ */
+export type Timestamplike = Date | string | number | null | undefined;
+
+/**
+ * Coerces whatever a timestamptz column has become back into a Date.
+ *
+ * Drizzle hands these back as `Date`, but `unstable_cache` serialises through
+ * JSON, so on a cache *hit* the very same query returns an ISO string. That
+ * asymmetry is invisible in development, where the cache is usually cold, and
+ * shows up in production as `getUTCDate is not a function`. Accepting both is
+ * the only way a formatter can be safe on both sides of a cache.
+ */
+function toDate(value: Timestamplike): Date | null {
+  if (value === null || value === undefined) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * "22 JUL 2026" from a Postgres `timestamptz` column.
  *
- * Drizzle returns those as a JS `Date`, not a string — passing one to
- * `formatDbDate` would blow up on `.split`. Read the UTC components rather
- * than the local ones so a server in IST and a browser in UTC agree.
+ * Reads the UTC components rather than the local ones so a server in IST and
+ * a browser in UTC agree on the day.
  */
-export function formatTimestamp(d: Date | null | undefined): string | null {
+export function formatTimestamp(value: Timestamplike): string | null {
+  const d = toDate(value);
   if (!d) return null;
   return `${String(d.getUTCDate()).padStart(2, "0")} ${
     MONTHS[d.getUTCMonth()]
@@ -94,8 +115,8 @@ export function formatTimestamp(d: Date | null | undefined): string | null {
 }
 
 /** The `dateTime` attribute for a `<time>` wrapping a timestamptz. */
-export function isoDate(d: Date | null | undefined): string | undefined {
-  return d ? d.toISOString().slice(0, 10) : undefined;
+export function isoDate(value: Timestamplike): string | undefined {
+  return toDate(value)?.toISOString().slice(0, 10);
 }
 
 /** "2026" — for the "since {year}" note under the capital stat. */

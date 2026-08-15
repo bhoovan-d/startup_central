@@ -1,6 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db, podcastEpisodes } from "@/db";
+import type { Timestamplike } from "@/lib/format";
 
 import { CACHE_TAGS, cached } from "./_cache";
 import { flattenTags, primarySlot, type TagRef } from "./_filters";
@@ -11,8 +12,12 @@ export type EpisodeRow = {
   episodeNumber: number | null;
   title: string;
   description: string | null;
-  /** timestamptz — a `Date`, so it formats through `formatTimestamp`. */
-  publishedAt: Date | null;
+  /**
+   * timestamptz. A `Date` on a cache miss, an ISO string on a hit — these
+   * queries are memoised and `unstable_cache` serialises through JSON.
+   * Always format it through `formatTimestamp`, which accepts both.
+   */
+  publishedAt: Timestamplike;
   youtubeId: string | null;
   spotifyUrl: string | null;
   appleUrl: string | null;

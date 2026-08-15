@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/db";
+import type { Timestamplike } from "@/lib/format";
 
 import { CACHE_TAGS, cached } from "./_cache";
 
@@ -129,11 +130,15 @@ export const getSectorBreakdown = cached(
 );
 
 /**
- * The newest `created_at` across the tables ingestion writes to, for the
- * footer's "Last updated" line. Null on an empty database, which the footer
- * renders as nothing at all rather than as a date.
+ * The newest `created_at` across the tables ingestion writes to.
+ *
+ * Returns `Timestamplike`, not `Date`, and the distinction is load-bearing:
+ * `cached()` serialises through JSON, so this returns a `Date` on a cache miss
+ * and the equivalent ISO string on a hit. Declaring `Date` here made the type
+ * a lie exactly where it mattered and crashed the homepage in production.
+ * Format it through `formatTimestamp`, which accepts both.
  */
-async function fetchLastUpdated(): Promise<Date | null> {
+async function fetchLastUpdated(): Promise<Timestamplike> {
   const result = await db.execute<{ last_updated: string | null }>(sql`
     select greatest(
       (select max(created_at) from funding_rounds),
