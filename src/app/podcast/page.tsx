@@ -73,7 +73,7 @@ export default async function PodcastPage() {
           </h1>
           <p className="mt-7 max-w-xl text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
             Conversations with the people who built, funded or buried an Indian
-            AI company — and the questions the press release skipped.
+            startup — and the questions the press release skipped.
           </p>
 
           {links.length > 0 ? (

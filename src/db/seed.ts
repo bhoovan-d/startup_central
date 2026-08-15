@@ -18,7 +18,7 @@
 // the same thing for the same reason.
 import "dotenv/config";
 
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import { closeDb, db, tags } from "./index";
 
@@ -28,21 +28,33 @@ import { closeDb, db, tags } from "./index";
  * `colorSlot` is the contract between the database and
  * `src/lib/chart-palette.ts`: colour follows the *entity*, never its rank, so
  * filtering a list must never repaint the sectors that survive the filter.
- * These indexes match the order the design proof used, so the palette on
- * screen is unchanged by the switch to real data.
+ * The palette is validated for exactly eight slots in this order — the labels
+ * changed when the site broadened past AI, the slots did not.
  *
- * `other` must stay at slot 7 — it is the bucket a ninth sector folds into,
- * and the palette is validated for exactly eight.
+ * `other` must stay at slot 7 — it is the bucket a ninth sector folds into.
  */
 const SECTOR_TAGS = [
-  { slug: "genai", label: "GenAI", colorSlot: 0 },
-  { slug: "vision", label: "Vision", colorSlot: 1 },
-  { slug: "speech", label: "Speech", colorSlot: 2 },
-  { slug: "agents", label: "Agents", colorSlot: 3 },
-  { slug: "infra", label: "Infra", colorSlot: 4 },
-  { slug: "health-ai", label: "Health AI", colorSlot: 5 },
-  { slug: "fintech-ai", label: "Fintech AI", colorSlot: 6 },
+  { slug: "fintech", label: "Fintech", colorSlot: 0 },
+  { slug: "consumer", label: "Consumer", colorSlot: 1 },
+  { slug: "saas", label: "SaaS", colorSlot: 2 },
+  { slug: "mobility", label: "Mobility", colorSlot: 3 },
+  { slug: "healthtech", label: "Healthtech", colorSlot: 4 },
+  { slug: "edtech", label: "Edtech", colorSlot: 5 },
+  { slug: "deeptech", label: "Deeptech", colorSlot: 6 },
   { slug: "other", label: "Other", colorSlot: 7 },
+];
+
+/**
+ * Sector slugs the site no longer uses.
+ *
+ * The old AI-only taxonomy is deleted rather than left in place: `listTags`
+ * drives the filter chips straight from this table, so a stale row shows up
+ * as a filter that can never match anything. Deleting cascades to
+ * `startup_tags`, which is why this runs before any tagging exists — after
+ * that it would silently drop classifications and would need a remap instead.
+ */
+const RETIRED_TAGS = [
+  "genai", "vision", "speech", "agents", "infra", "health-ai", "fintech-ai",
 ];
 
 async function main() {
@@ -69,6 +81,29 @@ async function main() {
   for (const r of rows) {
     console.log(`  ${r.slug.padEnd(12)} slot ${r.colorSlot}`);
   }
+
+  // Guard, not paranoia: this deletes rows, and the FK from `startup_tags`
+  // cascades. Refusing to run once anything is classified turns a silent data
+  // loss into a message asking for a remap.
+  const [tagged] = (
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from startup_tags`)
+  ).rows;
+
+  if (tagged && tagged.n > 0) {
+    console.log(
+      `\n  ${tagged.n} companies are tagged — leaving retired sectors alone.\n` +
+        "  Remap them before removing the old taxonomy.",
+    );
+  } else {
+    const removed = await db
+      .delete(tags)
+      .where(inArray(tags.slug, RETIRED_TAGS))
+      .returning({ slug: tags.slug });
+    if (removed.length > 0) {
+      console.log(`  retired ${removed.map((r) => r.slug).join(", ")}`);
+    }
+  }
+
   console.log(`Done — ${rows.length} tags.`);
 }
 

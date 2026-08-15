@@ -19,7 +19,7 @@ import { listTags } from "@/lib/queries/tags";
 
 export const metadata: Metadata = {
   title: "Startups",
-  description: "Every AI-first company we track, filterable by sector and status.",
+  description: "Every company we track, filterable by sector and status.",
 };
 
 /**

@@ -76,13 +76,11 @@ export async function POST(request: Request) {
  * expires the entry so the very next request rebuilds it.
  */
 function dropCaches(profile: string | { expire: number }): void {
-  for (const tag of [
-    CACHE_TAGS.rounds,
-    CACHE_TAGS.stats,
-    CACHE_TAGS.startups,
-    CACHE_TAGS.shutdowns,
-    CACHE_TAGS.innovations,
-  ]) {
+  // Every tag, not a hand-picked subset. An earlier version listed five and
+  // omitted `tags`, so the sector filter chips kept serving a taxonomy that
+  // had been deleted from the database. There are seven tags and dropping one
+  // costs a query; guessing which ones a write touched costs correctness.
+  for (const tag of Object.values(CACHE_TAGS)) {
     revalidateTag(tag, profile);
   }
 }

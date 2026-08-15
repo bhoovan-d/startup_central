@@ -55,7 +55,7 @@ export default function Home() {
               <LastUpdatedEyebrow />
             </Suspense>
             <h1 className="display max-w-4xl text-[clamp(2.25rem,6.5vw,5rem)] leading-[1.18]">
-              India&apos;s AI startups.
+              India&apos;s startups.
               <br />
               <span className="mark-block">Funded, shipped,</span>
               <br />
@@ -162,7 +162,7 @@ async function SiteStats() {
     : "disclosed only";
 
   const items: Stat[] = [
-    { k: "Companies tracked", v: String(s.companies), note: "AI-first, India HQ" },
+    { k: "Companies tracked", v: String(s.companies), note: "India HQ" },
     { k: "Capital raised", v: usd(s.capitalUsd) ?? "$0", note: capitalNote },
     {
       k: "Rounds this month",

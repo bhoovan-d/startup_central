@@ -18,7 +18,7 @@ import { listTags } from "@/lib/queries/tags";
 
 export const metadata: Metadata = {
   title: "Innovations",
-  description: "Models, papers, datasets and products shipped by Indian AI companies.",
+  description: "Models, papers, datasets and products shipped by Indian startups.",
 };
 
 export default async function Page({ searchParams }: PageProps<"/innovations">) {
