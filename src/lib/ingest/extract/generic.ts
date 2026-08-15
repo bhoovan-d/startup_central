@@ -26,37 +26,53 @@ export function createGenericExtractor(): Extractor {
   const model = process.env.GENERIC_LLM_MODEL!;
   const apiKey = process.env.GENERIC_LLM_API_KEY;
 
+  /**
+   * Whether this endpoint accepts `response_format`.
+   *
+   * "OpenAI-compatible" is a family resemblance, not a specification —
+   * compatibility layers differ on which optional parameters they accept, and
+   * an unsupported one is usually a hard 400 rather than something ignored.
+   * The first 400 flips this off for the rest of the run so the retry cost is
+   * paid once, not per article.
+   */
+  let sendResponseFormat = true;
+
+  async function call(input: ExtractInput): Promise<Response> {
+    return fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        "content-type": "application/json",
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 700,
+        ...(sendResponseFormat ? { response_format: { type: "json_object" } } : {}),
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildUserMessage(input) },
+        ],
+      }),
+    });
+  }
+
   return {
     name: "generic",
     async extract(input: ExtractInput) {
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          const res = await fetch(`${baseUrl}/chat/completions`, {
-            method: "POST",
-            signal: AbortSignal.timeout(30_000),
-            headers: {
-              "content-type": "application/json",
-              ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-            },
-            body: JSON.stringify({
-              model,
-              temperature: 0,
-              max_tokens: 700,
-              response_format: { type: "json_object" },
-              messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                { role: "user", content: buildUserMessage(input) },
-              ],
-            }),
-          });
+          const res = await call(input);
 
           // 429 is the normal free-tier signal, not a failure. Honour
           // Retry-After when the provider sends it.
           if (res.status === 429 || res.status >= 500) {
             const retryAfter = Number(res.headers.get("retry-after"));
-            const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-              ? retryAfter * 1000
-              : attempt * 2000;
+            const waitMs =
+              Number.isFinite(retryAfter) && retryAfter > 0
+                ? retryAfter * 1000
+                : attempt * 2000;
             if (attempt < MAX_ATTEMPTS) {
               await sleep(Math.min(waitMs, 15_000));
               continue;
@@ -64,7 +80,23 @@ export function createGenericExtractor(): Extractor {
             return null;
           }
 
-          if (!res.ok) return null;
+          if (res.status === 400 && sendResponseFormat) {
+            sendResponseFormat = false;
+            console.warn(
+              "[ingest] provider rejected response_format; retrying without it",
+            );
+            continue;
+          }
+
+          if (!res.ok) {
+            // Surface the reason once — a wrong model name or a bad key is
+            // otherwise indistinguishable from "the extractor found nothing",
+            // and the run would quietly fall back to regex for every article.
+            console.warn(
+              `[ingest] extractor HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`,
+            );
+            return null;
+          }
 
           const body = (await res.json()) as {
             choices?: { message?: { content?: string } }[];
