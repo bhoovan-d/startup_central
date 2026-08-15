@@ -48,17 +48,43 @@ export async function POST(request: Request) {
     );
   }
 
+  if (parsed.data.revalidateOnly) {
+    // Immediate expiry, not stale-while-revalidate: this path is a person who
+    // just approved a round asking to see it. `"max"` would serve them one
+    // more stale page, which reads as the approval having failed.
+    dropCaches({ expire: 0 });
+    return Response.json({ ok: true, revalidated: true });
+  }
+
   const report = await runIngest(parsed.data);
 
   if (!report.dryRun && (report.autoPublished > 0 || report.newItems > 0)) {
-    // The two-argument form is required — a bare `revalidateTag(tag)` is a
-    // type error in Next 16.
-    revalidateTag(CACHE_TAGS.rounds, "max");
-    revalidateTag(CACHE_TAGS.stats, "max");
-    revalidateTag(CACHE_TAGS.startups, "max");
+    // The cron has nobody waiting, so prefer stale-while-revalidate: readers
+    // get an instant page and the refresh happens behind it.
+    dropCaches("max");
   }
 
   return Response.json(report);
+}
+
+/**
+ * Drops every cache tag a write can affect.
+ *
+ * The second argument is required in Next 16 — a bare `revalidateTag(tag)` is
+ * a type error. It also decides the semantics: `"max"` marks the tag stale and
+ * serves the existing page while refreshing behind it, whereas `{ expire: 0 }`
+ * expires the entry so the very next request rebuilds it.
+ */
+function dropCaches(profile: string | { expire: number }): void {
+  for (const tag of [
+    CACHE_TAGS.rounds,
+    CACHE_TAGS.stats,
+    CACHE_TAGS.startups,
+    CACHE_TAGS.shutdowns,
+    CACHE_TAGS.innovations,
+  ]) {
+    revalidateTag(tag, profile);
+  }
 }
 
 /**

@@ -69,6 +69,62 @@ test("always dates from the feed, never invents one", async () => {
   assert.equal(e.announcedDate, null);
 });
 
+test("handles Title Case headlines", async () => {
+  // Indian tech press writes headlines in Title Case. A case-sensitive verb
+  // match silently extracted no company from any real Inc42 headline, so
+  // nothing could ever be published. These are verbatim from the live feed.
+  assert.equal(
+    (await extract("Rapido Bags Karnataka Cab Aggregator Licence Till 2031")).companyName,
+    "Rapido",
+  );
+  assert.equal(
+    (await extract("Zetwerk Raises $120 Mn In Series F Led By Avenir")).companyName,
+    "Zetwerk",
+  );
+  assert.equal(
+    (await extract("Sarvam AI Secures $41 Mn Series B")).companyName,
+    "Sarvam AI",
+  );
+});
+
+test("does not mistake a roundup headline for a company", async () => {
+  // "…Indian Startups Raised $140 Mn This Week" must not yield a company —
+  // the capitalised words before the verb are generic nouns, not a name.
+  const e = await extract(
+    "From Yulu To Discovered Materials — Indian Startups Raised $140 Mn This Week",
+  );
+  assert.equal(e.companyName, null);
+  assert.ok(e.confidence < 0.85, "a roundup must not clear the auto-publish bar");
+});
+
+test("a VC closing a fund is not a startup round", async () => {
+  // These parse as funding with a company and an amount, and would publish as
+  // startup rounds. All verbatim from the live feed.
+  for (const title of [
+    "Accel raises $550 Mn India fund, takes India corpus to $1.2 Bn in 18 months",
+    "Bluehill.VC closes maiden frontier-tech fund at Rs 400 Cr",
+    "Mirae Asset Venture Investments closes MAVOF II at Rs 1,125 Cr",
+  ]) {
+    const e = await extract(title);
+    assert.notEqual(e.eventType, "funding", `should not be funding: ${title}`);
+  }
+});
+
+test("a startup raising from a fund is still a round", async () => {
+  // The mirror case: an investor named in the headline must not knock a real
+  // round out of the funding class.
+  const e = await extract("Yulu raises $93 Mn in Series C round led by GEF Capital");
+  assert.equal(e.eventType, "funding");
+  assert.equal(e.companyName, "Yulu");
+});
+
+test("keeps multi-word names with joiners intact", async () => {
+  assert.equal(
+    (await extract("Bank of Baroda Acquires Fintech Startup")).companyName,
+    "Bank of Baroda",
+  );
+});
+
 test("output always satisfies the schema, even on junk input", async () => {
   for (const title of ["", "?????", "a", "RAISES RAISES RAISES"]) {
     const raw = await extractor.extract(input(title));

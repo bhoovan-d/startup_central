@@ -74,6 +74,14 @@ export const IngestRequest = z.object({
   limit: z.number().int().min(1).max(200).default(40),
   /** Fetch, parse and extract, but write nothing. */
   dryRun: z.boolean().default(false),
+  /**
+   * Skip ingestion entirely and just drop the query caches.
+   *
+   * The review CLI writes straight to Postgres, so it cannot call
+   * `revalidateTag` — that only exists inside a request. Without this, an
+   * approved round stays invisible for the cache TTL and reads as a bug.
+   */
+  revalidateOnly: z.boolean().default(false),
   /** Ignore feed items older than this. */
   since: z.iso.date().optional(),
 });

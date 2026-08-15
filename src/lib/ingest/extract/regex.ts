@@ -18,14 +18,68 @@ const ACQUISITION = /\b(acquires?|acquired|acquisition|buys? out|takeover|merges
 const LAUNCH = /\b(launch(?:es|ed)?|unveils?|unveiled|releases?|released|open[- ]sources?d?|introduces?)\b/i;
 
 /**
- * "Sarvam AI raises $41M" -> "Sarvam AI".
+ * The verb that separates the subject of a headline from what happened to it.
  *
- * Anchored at the start of the headline and stops at the verb. Publications
- * lead with the company in a funding story almost without exception; when they
- * don't, this returns null and the item goes to review rather than guessing at
- * a noun phrase somewhere in the middle.
+ * Case-insensitive, which is the whole point: Indian tech publications write
+ * headlines in Title Case ("Rapido Bags…", "Zetwerk Raises…"). An earlier
+ * version folded this into a single case-sensitive pattern, so the verb never
+ * matched a real headline, no company was ever extracted, and nothing could
+ * be published — the pipeline collected articles forever and produced nothing.
  */
-const COMPANY = /^([A-Z][\w.&'’-]*(?:\s+(?:[A-Z][\w.&'’-]*|of|and|&)){0,3})\s+(?:raise[sd]?|raising|secures?|secured|bags?|bagged|closes?|closed|nets?|shuts?|winds?|acquires?|acquired|launch(?:es|ed)?|unveils?|releases?)/;
+const EVENT_VERB =
+  /\b(raises?|raised|raising|secures?|secured|bags?|bagged|closes?|closed|nets?|netted|mops? up|shuts? down|winds? down|acquires?|acquired|launch(?:es|ed)?|unveils?|unveiled|releases?|released)\b/i;
+
+/**
+ * Words that are capitalised in a headline but name no company. Without this,
+ * roundups like "…Indian Startups Raised $140 Mn This Week" yield "Indian
+ * Startups" as the company and score it as a real extraction.
+ */
+const NOT_A_COMPANY = new Set([
+  "startup", "startups", "company", "companies", "firm", "firms",
+  "unicorn", "unicorns", "founder", "founders", "investor", "investors",
+  "govt", "government", "report", "india", "indian", "week", "month",
+  "fund", "funds", "vc", "vcs", "who", "what", "this", "these",
+]);
+
+/**
+ * "Sarvam AI raises $41M" -> "Sarvam AI"; "Rapido Bags…" -> "Rapido".
+ *
+ * Finds the event verb, then walks backwards over the capitalised words in
+ * front of it. Publications lead with the company in a funding story almost
+ * without exception; when the words before the verb aren't a name, this
+ * returns null and the item goes to review rather than guessing at a noun
+ * phrase somewhere in the middle.
+ */
+function detectCompany(title: string): string | null {
+  const verb = title.match(EVENT_VERB);
+  if (!verb || verb.index === undefined) return null;
+
+  const before = title.slice(0, verb.index).trim();
+  if (!before) return null;
+
+  const tokens = before.split(/\s+/);
+  const name: string[] = [];
+
+  for (let i = tokens.length - 1; i >= 0 && name.length < 4; i--) {
+    const token = tokens[i]!;
+    const isCapitalised = /^[A-Z][\w.&'’-]*$/.test(token);
+    // Joiners only count when they sit between two capitalised words, so
+    // "Bank of Baroda" holds together but a leading "And" does not.
+    const isJoiner = name.length > 0 && /^(of|and|&|the)$/i.test(token);
+    if (!isCapitalised && !isJoiner) break;
+    name.unshift(token);
+  }
+
+  while (name.length > 0 && /^(of|and|&|the)$/i.test(name[0]!)) name.shift();
+  if (name.length === 0) return null;
+
+  // A name made only of generic nouns is not a name.
+  if (name.every((t) => NOT_A_COMPANY.has(t.toLowerCase().replace(/[^\w]/g, "")))) {
+    return null;
+  }
+
+  return name.join(" ");
+}
 
 /** "led by Lightspeed", "from Peak XV and Accel". */
 const INVESTORS = /\b(led by|backed by|from)\s+([A-Z][\w.&'’-]*(?:\s+[A-Z][\w.&'’-]*)*(?:(?:,|\s+and\s+|\s+&\s+)[A-Z][\w.&'’-]*(?:\s+[A-Z][\w.&'’-]*)*)*)/;
@@ -50,6 +104,22 @@ function detectRound(text: string): string | null {
     if (re.test(text)) return value;
   }
   return null;
+}
+
+/**
+ * A VC firm closing a fund is not a startup raising a round.
+ *
+ * "Accel raises $550 Mn India fund" and "Bluehill.VC closes maiden fund" both
+ * parse as funding events with a company and an amount, and would publish as
+ * startup rounds — a whole class of wrong rows. The subject being a fund
+ * vehicle is the tell, so these route to review as `other` instead.
+ */
+const FUND_VEHICLE_SUBJECT = /\b(capital|ventures?|partners|vc|amc|asset management|advisors)\b/i;
+
+function looksLikeFundVehicle(title: string, company: string | null): boolean {
+  if (company && FUND_VEHICLE_SUBJECT.test(company)) return true;
+  // "closes maiden frontier-tech fund at Rs 400 Cr", "raises $550 Mn India fund"
+  return /\b(closes?|closed|raises?|raised)\b[^.]{0,40}\b(fund|corpus)\b/i.test(title);
 }
 
 function detectEventType(title: string): string {
@@ -84,8 +154,10 @@ export function createRegexExtractor(): Extractor {
       const title = input.title;
       const haystack = `${title} ${input.excerpt}`;
 
-      const eventType = detectEventType(title);
-      const companyName = title.match(COMPANY)?.[1]?.trim() ?? null;
+      const companyName = detectCompany(title);
+      const eventType = looksLikeFundVehicle(title, companyName)
+        ? "other"
+        : detectEventType(title);
       const amount = parseAmount(haystack);
       const roundType = detectRound(haystack);
       const investors = detectInvestors(haystack);

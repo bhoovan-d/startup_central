@@ -43,6 +43,7 @@ async function main() {
 
   const report = await runIngest({
     dryRun,
+    revalidateOnly: false,
     limit: limitArg ? Number(limitArg) : 40,
     sources: source ? [source] : undefined,
     since: flag("since"),

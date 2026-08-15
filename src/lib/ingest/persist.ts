@@ -127,6 +127,15 @@ export async function writeRound(
   startupId: number,
   event: ExtractedEvent,
   source: { url: string; name: string },
+  /**
+   * False when a human approved this through the review CLI.
+   *
+   * The flag drives the "Auto-extracted" marker in the UI, so getting it
+   * wrong misattributes the row: a reviewed round would claim nobody looked
+   * at it. Defaults to true because the unattended pipeline is the caller
+   * that must never forget to say so.
+   */
+  autoPublished = true,
 ): Promise<RoundWriteResult> {
   if (!event.announcedDate) {
     return { status: "skipped", reason: "no announced date" };
@@ -144,9 +153,7 @@ export async function writeRound(
         sourceUrl: source.url,
         sourceName: source.name,
         confidence: event.confidence,
-        // Every row this function writes had no human in the loop. The flag is
-        // what lets the UI mark it, and what lets a reviewer find it later.
-        autoPublished: true,
+        autoPublished,
       })
       .onConflictDoNothing({
         target: [
