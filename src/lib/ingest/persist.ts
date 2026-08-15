@@ -6,7 +6,9 @@ import {
   investors,
   newsItems,
   roundInvestors,
+  startupTags,
   startups,
+  tags,
 } from "@/db";
 
 import { normalizeName, slugify, stripHtml, truncateWords } from "./normalize";
@@ -83,6 +85,73 @@ export async function findStartupByName(
 
 /** Anything that can run a query — the db handle or an open transaction. */
 type Executor = Pick<typeof db, "insert">;
+
+/**
+ * Creates a company from an extraction, when auto-creation is switched on.
+ *
+ * Off by default, and the default is the safe one: creating a `startups` row
+ * asserts that a company exists and is named this, which is a claim. With
+ * INGEST_AUTOCREATE_STARTUPS=true the pipeline makes that claim itself and
+ * marks it `verified: false`, so the site renders an "Unverified" badge until
+ * a person confirms it. That is the whole trade — more volume, visibly
+ * flagged, audited after the fact rather than gated before.
+ *
+ * Returns null when the flag is off, which sends the item to review.
+ */
+export async function autoCreateStartup(
+  name: string,
+  sourceUrl: string,
+): Promise<{ id: number; slug: string } | null> {
+  if (process.env.INGEST_AUTOCREATE_STARTUPS !== "true") return null;
+
+  const normalized = normalizeName(name);
+  if (!normalized) return null;
+
+  const rows = await db
+    .insert(startups)
+    .values({
+      slug: slugify(name),
+      name,
+      normalizedName: normalized,
+      sourceUrls: [sourceUrl],
+    })
+    // A race between two runs, or a slug collision between two different
+    // companies whose names slugify the same, must not abort the run.
+    .onConflictDoNothing()
+    .returning({ id: startups.id, slug: startups.slug });
+
+  if (rows[0]) return rows[0];
+
+  // onConflictDoNothing returned nothing, so someone already has this
+  // normalized name — use theirs.
+  const existing = await findStartupByName(name);
+  return existing ? { id: existing.id, slug: existing.slug } : null;
+}
+
+/**
+ * Files a company under a sector, if the extractor named a known one.
+ *
+ * Silently does nothing for an unrecognised slug: an unknown sector should
+ * leave the company untagged, not fail the write. Untagged companies render
+ * in ink rather than borrowing another sector's colour.
+ */
+export async function tagStartupSector(
+  startupId: number,
+  sectorSlug: string | null,
+): Promise<void> {
+  if (!sectorSlug) return;
+
+  const tag = await db.query.tags.findFirst({
+    columns: { id: true },
+    where: eq(tags.slug, sectorSlug),
+  });
+  if (!tag) return;
+
+  await db
+    .insert(startupTags)
+    .values({ startupId, tagId: tag.id })
+    .onConflictDoNothing();
+}
 
 /** Upserts an investor by normalized name and returns its id. */
 async function upsertInvestor(tx: Executor, name: string): Promise<number | null> {
@@ -195,6 +264,30 @@ export async function markAutoPublished(
       extracted: JSON.stringify(event),
       confidence: event.confidence,
       resolvedStartupId: startupId,
+      reviewedAt: new Date(),
+    })
+    .where(eq(newsItems.id, newsItemId));
+}
+
+/**
+ * Marks an item out of scope, with the reason kept for auditing.
+ *
+ * Distinct from `pending`: this is a decision, not a backlog. It stays in
+ * `news_items` rather than being deleted so the URL dedupe still recognises
+ * it on the next run and it never gets re-fetched or re-judged.
+ */
+export async function markRejected(
+  newsItemId: number,
+  event: ExtractedEvent | null,
+  reason: string,
+): Promise<void> {
+  await db
+    .update(newsItems)
+    .set({
+      status: "rejected",
+      eventType: event?.eventType,
+      extracted: event ? JSON.stringify({ ...event, rejectedBecause: reason }) : null,
+      confidence: event?.confidence,
       reviewedAt: new Date(),
     })
     .where(eq(newsItems.id, newsItemId));

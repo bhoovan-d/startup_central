@@ -10,8 +10,17 @@ on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
+    inputs:
+      limit:
+        description: "Feed items to consider"
+        required: false
+        default: "60"
+      dryRun:
+        description: "Extract but write nothing"
+        type: boolean
+        required: false
+        default: false
 
-# The job posts to our own endpoint and needs nothing from the repo.
 permissions: {}
 
 concurrency:
@@ -19,33 +28,62 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  trigger:
+  ingest:
     runs-on: ubuntu-latest
+    # The runner does the work rather than POSTing to /api/ingest. A serverless
+    # function is capped at 60s, and a free-tier LLM rate-limited to ~15 req/min
+    # cannot extract a full batch inside that. Here there is no such ceiling,
+    # and the compute is free.
+    timeout-minutes: 20
+
     steps:
-      - name: POST /api/ingest
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Ingest
         env:
-          # URL in vars, secret in secrets — neither is ever echoed.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Where to send the cache-drop once rows have been written, so the
+          # deployed site reflects them immediately rather than at TTL.
+          INGEST_URL: ${{ vars.INGEST_URL }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+          # Extraction. Unset EXTRACTOR falls back to regex, which needs no
+          # credentials — the pipeline still runs if the LLM keys go missing.
+          EXTRACTOR: ${{ vars.EXTRACTOR }}
+          GENERIC_LLM_BASE_URL: ${{ vars.GENERIC_LLM_BASE_URL }}
+          GENERIC_LLM_MODEL: ${{ vars.GENERIC_LLM_MODEL }}
+          GENERIC_LLM_API_KEY: ${{ secrets.GENERIC_LLM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Automation policy.
+          INGEST_AUTOCREATE_STARTUPS: ${{ vars.INGEST_AUTOCREATE_STARTUPS }}
+          INGEST_AUTOPUBLISH_THRESHOLD: ${{ vars.INGEST_AUTOPUBLISH_THRESHOLD }}
+          INGEST_INDIA_ONLY: ${{ vars.INGEST_INDIA_ONLY }}
+        run: |
+          set -euo pipefail
+          npm run ingest -- \
+            --limit "${{ github.event.inputs.limit || '60' }}" \
+            ${{ github.event.inputs.dryRun == 'true' && '--dry-run' || '' }}
+
+      - name: Refresh the deployed site
+        if: ${{ github.event.inputs.dryRun != 'true' }}
+        env:
           INGEST_URL: ${{ vars.INGEST_URL }}
           INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
         run: |
           set -euo pipefail
-
           if [ -z "${INGEST_URL:-}" ]; then
-            echo "::error::repository variable INGEST_URL is not set"
-            exit 1
+            echo "INGEST_URL not set — skipping cache refresh"
+            exit 0
           fi
-
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
-            -X POST "$INGEST_URL" \
+          curl -sS -X POST "$INGEST_URL" \
             -H "authorization: Bearer $INGEST_SECRET" \
             -H 'content-type: application/json' \
-            --max-time 120 \
-            -d '{"limit":40}')
-
-          cat /tmp/out.json
+            --max-time 60 \
+            -d '{"revalidateOnly":true}'
           echo
-
-          if [ "$code" != "200" ]; then
-            echo "::error::ingest returned HTTP $code"
-            exit 1
-          fi

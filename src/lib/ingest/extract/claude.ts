@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { eventTypeEnum, roundTypeEnum } from "@/db/schema";
 
-import { toDateOnly } from "../normalize";
+import { SECTOR_SLUGS, SYSTEM_PROMPT, buildUserMessage } from "./prompt";
 import type { ExtractInput, Extractor } from "./index";
 
 /**
@@ -61,6 +61,14 @@ const SCHEMA = {
         additionalProperties: false,
       },
     },
+    isIndian: {
+      type: ["boolean", "null"],
+      description: "True if headquartered in India, false if clearly elsewhere, null if unclear.",
+    },
+    sector: {
+      type: ["string", "null"],
+      enum: [...SECTOR_SLUGS, null],
+    },
     confidence: {
       type: "number",
       description:
@@ -75,18 +83,12 @@ const SCHEMA = {
     "amountInr",
     "announcedDate",
     "investors",
+    "isIndian",
+    "sector",
     "confidence",
   ],
   additionalProperties: false,
 } as const;
-
-const SYSTEM = `You extract structured facts from Indian startup news headlines.
-
-Rules:
-- Extract only what the text states. Never infer a figure, a date, or an investor that is not written down.
-- Never convert between currencies. If the source says "340 crore", set amountInr and leave amountUsd null.
-- If the text is not about a funding round, shutdown, launch or acquisition, use eventType "other" and a low confidence.
-- Prefer a low confidence over a confident guess. Uncertain rows go to a human, which is cheap; wrong rows get published, which is not.`;
 
 export function createClaudeExtractor(): Extractor {
   const client = new Anthropic();
@@ -95,15 +97,6 @@ export function createClaudeExtractor(): Extractor {
   return {
     name: "claude",
     async extract(input: ExtractInput) {
-      const message = [
-        `Source: ${input.sourceName}`,
-        `Published: ${toDateOnly(input.publishedAt) ?? "unknown"}`,
-        `Headline: ${input.title}`,
-        input.excerpt ? `Excerpt: ${input.excerpt}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
       try {
         const response = await client.messages.create({
           model,
@@ -114,11 +107,11 @@ export function createClaudeExtractor(): Extractor {
           // Accepted on Haiku 4.5. Note there is deliberately no
           // `output_config.effort` here — that parameter errors on this model.
           temperature: 0,
-          system: SYSTEM,
+          system: SYSTEM_PROMPT,
           output_config: {
             format: { type: "json_schema", schema: SCHEMA },
           },
-          messages: [{ role: "user", content: message }],
+          messages: [{ role: "user", content: buildUserMessage(input) }],
         });
 
         const block = response.content.find((b) => b.type === "text");

@@ -56,7 +56,8 @@ async function main() {
   console.log(`  extracted            ${report.extracted}`);
   console.log(`  auto-published       ${report.autoPublished}`);
   console.log(`  queued for review    ${report.pending}`);
-  console.log(`  skipped              ${report.skipped}`);
+  console.log(`  out of scope         ${report.rejected}`);
+  console.log(`  skipped (seen)       ${report.skipped}`);
   console.log(`  took                 ${report.durationMs}ms`);
 
   if (report.errors.length > 0) {

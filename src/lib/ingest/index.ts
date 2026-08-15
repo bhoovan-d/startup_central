@@ -1,10 +1,13 @@
 import { getExtractor } from "./extract";
 import { createRegexExtractor } from "./extract/regex";
 import {
+  autoCreateStartup,
   findStartupByName,
   markAutoPublished,
   markPending,
+  markRejected,
   recordNewsItem,
+  tagStartupSector,
   writeRound,
 } from "./persist";
 import { fetchFeed } from "./rss";
@@ -29,12 +32,17 @@ export async function runIngest(req: IngestRequest): Promise<IngestReport> {
   // rather than skipped entirely.
   const regex = createRegexExtractor();
 
+  // Defaults to on. With the regex extractor nothing is ever dropped, because
+  // only a model can answer "is this company Indian?".
+  const indiaOnly = process.env.INGEST_INDIA_ONLY !== "false";
+
   let fetched = 0;
   let parsed = 0;
   let newItems = 0;
   let extracted = 0;
   let autoPublished = 0;
   let pending = 0;
+  let rejected = 0;
   let skipped = 0;
 
   // Fetch every feed concurrently but catch per-source: one publisher blocking
@@ -116,7 +124,16 @@ export async function runIngest(req: IngestRequest): Promise<IngestReport> {
       const event = result.data;
       extracted += 1;
 
-      const decision = await decide(event, threshold);
+      // Scope filter. Only a model fills `isIndian` in, so with the regex
+      // extractor this is always null and nothing is dropped — the filter
+      // costs nothing until there is a model to answer the question.
+      if (indiaOnly && event.isIndian === false) {
+        await markRejected(news.id, event, "not an Indian company");
+        rejected += 1;
+        continue;
+      }
+
+      const decision = await decide(event, threshold, item.url);
 
       if (decision.autoPublish) {
         const written = await writeRound(decision.startupId, event, {
@@ -125,6 +142,7 @@ export async function runIngest(req: IngestRequest): Promise<IngestReport> {
         });
 
         if (written.status === "written" || written.status === "duplicate") {
+          await tagStartupSector(decision.startupId, event.sector);
           await markAutoPublished(news.id, decision.startupId, event);
           autoPublished += 1;
           continue;
@@ -147,6 +165,7 @@ export async function runIngest(req: IngestRequest): Promise<IngestReport> {
     extracted,
     autoPublished,
     pending,
+    rejected,
     skipped,
     errors,
     durationMs: Date.now() - startedAt,
@@ -159,23 +178,34 @@ type Decision =
   | { autoPublish: false };
 
 /**
- * The auto-publish gate. Four conditions, all required.
+ * The auto-publish gate.
  *
  * Only funding events pass. Shutdowns, launches and acquisitions always go to
  * review: `shutdowns.cause_tags` is a NOT NULL enum array and `story` and
  * `lessons` are explicitly our own words, so no extractor gets to decide why
  * a company died.
+ *
+ * The company must resolve. By default that means matching one that already
+ * exists; with INGEST_AUTOCREATE_STARTUPS=true the pipeline will create it
+ * instead, which is what lets a run publish without a human ever seeing it.
  */
-async function decide(event: ExtractedEvent, threshold: number): Promise<Decision> {
+async function decide(
+  event: ExtractedEvent,
+  threshold: number,
+  sourceUrl: string,
+): Promise<Decision> {
   if (event.eventType !== "funding") return { autoPublish: false };
   if (event.confidence < threshold) return { autoPublish: false };
   if (!event.announcedDate) return { autoPublish: false };
   if (!event.companyName) return { autoPublish: false };
 
-  const startup = await findStartupByName(event.companyName);
-  if (!startup) return { autoPublish: false };
+  const existing = await findStartupByName(event.companyName);
+  if (existing) return { autoPublish: true, startupId: existing.id };
 
-  return { autoPublish: true, startupId: startup.id };
+  const created = await autoCreateStartup(event.companyName, sourceUrl);
+  if (created) return { autoPublish: true, startupId: created.id };
+
+  return { autoPublish: false };
 }
 
 function autopublishThreshold(): number {

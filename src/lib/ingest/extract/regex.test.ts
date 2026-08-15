@@ -125,6 +125,15 @@ test("keeps multi-word names with joiners intact", async () => {
   );
 });
 
+test("regex never claims to know nationality or sector", async () => {
+  // Only a model can answer these. The regex extractor must leave them null
+  // rather than guessing, or the India filter would silently drop real
+  // companies on a zero-key setup.
+  const e = await extract("Yulu raises $93 Mn in Series C round led by GEF Capital");
+  assert.equal(e.isIndian, null);
+  assert.equal(e.sector, null);
+});
+
 test("output always satisfies the schema, even on junk input", async () => {
   for (const title of ["", "?????", "a", "RAISES RAISES RAISES"]) {
     const raw = await extractor.extract(input(title));

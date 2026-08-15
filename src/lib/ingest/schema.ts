@@ -57,6 +57,25 @@ export const ExtractedEvent = z.object({
     .max(12)
     .default([]),
 
+  /**
+   * Whether the company is Indian.
+   *
+   * The feeds are Indian publications but carry global stories — a US company
+   * raising from an Indian fund is a routine headline. Null means "couldn't
+   * tell", which is treated as out of scope by the filter rather than guessed
+   * at. The regex extractor always returns null; only a model fills this in.
+   */
+  isIndian: z.boolean().nullable().default(null),
+
+  /**
+   * One of the seeded sector slugs, or null.
+   *
+   * Validated against the taxonomy at write time, not here — the model gets
+   * the list in its prompt but an unknown slug should degrade to untagged
+   * rather than reject the whole extraction.
+   */
+  sector: z.string().trim().max(40).nullable().default(null),
+
   confidence: z.number().min(0).max(1),
 });
 
@@ -96,6 +115,8 @@ export type IngestReport = {
   extracted: number;
   autoPublished: number;
   pending: number;
+  /** Dropped by the scope filter — out of scope, not merely unpublished. */
+  rejected: number;
   skipped: number;
   errors: string[];
   durationMs: number;

@@ -1,28 +1,25 @@
-import { toDateOnly } from "../normalize";
+import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
 import type { ExtractInput, Extractor } from "./index";
 
 /**
- * Any OpenAI-compatible endpoint, for self-hosted or third-party models.
+ * Any OpenAI-compatible chat-completions endpoint.
  *
- * Plain `fetch` rather than a client library — the surface used here is one
- * POST with `response_format: json_object`, which is not worth a dependency.
- * Output is validated by the same zod schema as every other extractor.
+ * This is the path to a free model. Groq, Google Gemini and OpenRouter all
+ * expose an OpenAI-compatible API, so switching provider is three env vars and
+ * no code. Plain `fetch` rather than a client library — the surface used here
+ * is one POST, which is not worth a dependency.
+ *
+ * Output is validated by the same zod schema as every other extractor, so a
+ * weaker free model cannot put a malformed row into the database; it just
+ * sends more items to review.
  */
 
-const SYSTEM = `Extract structured facts from an Indian startup news headline. Reply with JSON only.
+/** Free tiers rate-limit aggressively; back off rather than dropping items. */
+const MAX_ATTEMPTS = 3;
 
-{
-  "eventType": "funding" | "shutdown" | "launch" | "acquisition" | "other",
-  "companyName": string,
-  "roundType": string | null,
-  "amountUsd": integer | null,
-  "amountInr": integer | null,
-  "announcedDate": "YYYY-MM-DD" | null,
-  "investors": [{ "name": string, "isLead": boolean }],
-  "confidence": number between 0 and 1
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-Extract only what the text states. Never convert between currencies — if the source says rupees, fill amountInr and leave amountUsd null. Prefer a low confidence over a confident guess.`;
 
 export function createGenericExtractor(): Extractor {
   const baseUrl = process.env.GENERIC_LLM_BASE_URL!.replace(/\/+$/, "");
@@ -32,49 +29,67 @@ export function createGenericExtractor(): Extractor {
   return {
     name: "generic",
     async extract(input: ExtractInput) {
-      const user = [
-        `Source: ${input.sourceName}`,
-        `Published: ${toDateOnly(input.publishedAt) ?? "unknown"}`,
-        `Headline: ${input.title}`,
-        input.excerpt ? `Excerpt: ${input.excerpt}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await fetch(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            signal: AbortSignal.timeout(30_000),
+            headers: {
+              "content-type": "application/json",
+              ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+            },
+            body: JSON.stringify({
+              model,
+              temperature: 0,
+              max_tokens: 700,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: SYSTEM_PROMPT },
+                { role: "user", content: buildUserMessage(input) },
+              ],
+            }),
+          });
 
-      try {
-        const res = await fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          signal: AbortSignal.timeout(30_000),
-          headers: {
-            "content-type": "application/json",
-            ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0,
-            max_tokens: 1024,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: SYSTEM },
-              { role: "user", content: user },
-            ],
-          }),
-        });
+          // 429 is the normal free-tier signal, not a failure. Honour
+          // Retry-After when the provider sends it.
+          if (res.status === 429 || res.status >= 500) {
+            const retryAfter = Number(res.headers.get("retry-after"));
+            const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+              ? retryAfter * 1000
+              : attempt * 2000;
+            if (attempt < MAX_ATTEMPTS) {
+              await sleep(Math.min(waitMs, 15_000));
+              continue;
+            }
+            return null;
+          }
 
-        if (!res.ok) {
-          console.warn(`[ingest] generic extractor HTTP ${res.status}; falling back to regex`);
+          if (!res.ok) return null;
+
+          const body = (await res.json()) as {
+            choices?: { message?: { content?: string } }[];
+          };
+          const content = body.choices?.[0]?.message?.content;
+          return content ? JSON.parse(stripCodeFence(content)) : null;
+        } catch {
+          if (attempt < MAX_ATTEMPTS) {
+            await sleep(attempt * 2000);
+            continue;
+          }
           return null;
         }
-
-        const body = (await res.json()) as {
-          choices?: { message?: { content?: string } }[];
-        };
-        const content = body.choices?.[0]?.message?.content;
-        return content ? JSON.parse(content) : null;
-      } catch (err) {
-        console.warn("[ingest] generic extraction failed:", err);
-        return null;
       }
+      return null;
     },
   };
+}
+
+/**
+ * Smaller models often wrap JSON in a markdown fence despite being asked for
+ * JSON only, and some ignore `response_format` entirely. Cheaper to unwrap
+ * here than to lose the extraction to a parse error.
+ */
+function stripCodeFence(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  return (fenced ? fenced[1]! : text).trim();
 }
