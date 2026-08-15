@@ -1,0 +1,51 @@
+name: Ingest
+
+on:
+  # Every six hours, at :17 past — off the hour, where every other cron in the
+  # world piles up. GitHub's scheduler is best-effort and can run late; that is
+  # fine here, because the run is idempotent (news_items dedupes on URL) and
+  # the next firing picks up whatever the last one missed.
+  #
+  # Note GitHub disables scheduled workflows after 60 days of repo inactivity.
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+# The job posts to our own endpoint and needs nothing from the repo.
+permissions: {}
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/ingest
+        env:
+          # URL in vars, secret in secrets — neither is ever echoed.
+          INGEST_URL: ${{ vars.INGEST_URL }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${INGEST_URL:-}" ]; then
+            echo "::error::repository variable INGEST_URL is not set"
+            exit 1
+          fi
+
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -X POST "$INGEST_URL" \
+            -H "authorization: Bearer $INGEST_SECRET" \
+            -H 'content-type: application/json' \
+            --max-time 120 \
+            -d '{"limit":40}')
+
+          cat /tmp/out.json
+          echo
+
+          if [ "$code" != "200" ]; then
+            echo "::error::ingest returned HTTP $code"
+            exit 1
+          fi
