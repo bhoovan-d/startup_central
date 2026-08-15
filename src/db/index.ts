@@ -29,8 +29,11 @@ function createPool(): Pool {
     );
   }
 
+  const { url, ssl } = resolveSsl(connectionString);
+
   return new Pool({
-    connectionString,
+    connectionString: url,
+    ssl,
     // Supavisor multiplexes in transaction mode, so this pool only needs to
     // cover the queries one instance runs concurrently — the homepage fans out
     // across a handful of Suspense boundaries, and the list pages issue their
@@ -39,11 +42,44 @@ function createPool(): Pool {
     max: 5,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
-    // SSL is left to the connection string. Supabase's URL carries
-    // `sslmode=require`, which pg parses with libpq's semantics — encrypted,
-    // without demanding a locally-trusted CA chain. Hardcoding an `ssl` object
-    // here would override that and break on a cert we can't verify.
   });
+}
+
+/**
+ * Decides TLS settings independently of whatever `sslmode` the URL carries.
+ *
+ * `pg` 8.23 resolves `sslmode` from the connection string and that resolution
+ * beats an explicit `ssl` option, so a pasted Supabase URL — which ships with
+ * `sslmode=require` — is decisive. Since 8.23 that value is treated as an
+ * alias for `verify-full`, which demands a locally trusted CA chain and fails
+ * against Supabase's pooler with SELF_SIGNED_CERT_IN_CHAIN.
+ *
+ * Stripping the parameter and setting `ssl` here means the app works with
+ * whichever connection string someone pastes into their host's dashboard,
+ * rather than depending on them having hand-edited it. Connections are still
+ * TLS-encrypted; the chain just isn't verified, which is what `require` has
+ * always meant in libpq. To harden further, pull Supabase's CA certificate
+ * and pass `{ ca, rejectUnauthorized: true }`.
+ *
+ * Local Postgres, which typically has no TLS at all, is left alone.
+ */
+function resolveSsl(connectionString: string): {
+  url: string;
+  ssl: false | { rejectUnauthorized: boolean };
+} {
+  let parsed: URL;
+  try {
+    parsed = new URL(connectionString);
+  } catch {
+    return { url: connectionString, ssl: false };
+  }
+
+  const host = parsed.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  if (isLocal) return { url: connectionString, ssl: false };
+
+  parsed.searchParams.delete("sslmode");
+  return { url: parsed.toString(), ssl: { rejectUnauthorized: false } };
 }
 
 /**
